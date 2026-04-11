@@ -1,7 +1,6 @@
 <script>
 	import { BOX_SIZE } from '@sudoku/constants';
 	import { gamePaused } from '@sudoku/stores/game';
-	import { grid } from '@sudoku/stores/grid';
 	import { settings } from '@sudoku/stores/settings';
 	import { cursor } from '@sudoku/stores/cursor';
 	import { candidates } from '@sudoku/stores/candidates';
@@ -46,10 +45,10 @@
 					      candidates={$candidates[x + ',' + y]}
 					      disabled={$gamePaused}
 					      selected={isSelected($cursor, x, y)}
-					      userNumber={$grid[y][x] === 0}
+					      userNumber={$gameStore.grid[y][x] === 0}
 					      sameArea={$settings.highlightCells && !isSelected($cursor, x, y) && isSameArea($cursor, x, y)}
 					      sameNumber={$settings.highlightSame && value && !isSelected($cursor, x, y) && getValueAtCursor($gameStore.grid, $cursor) === value}
-					      conflictingNumber={$settings.highlightConflicting && $grid[y][x] === 0 && $gameStore.invalidCells.includes(x + ',' + y)} />
+					      conflictingNumber={$settings.highlightConflicting && $gameStore.grid[y][x] === 0 && $gameStore.invalidCells.includes(x + ',' + y)} />
 				{/each}
 			{/each}
 

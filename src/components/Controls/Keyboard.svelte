@@ -1,5 +1,4 @@
 <script>
-	import { userGrid } from '@sudoku/stores/grid';
 	import { cursor } from '@sudoku/stores/cursor';
 	import { notes } from '@sudoku/stores/notes';
 	import { candidates } from '@sudoku/stores/candidates';

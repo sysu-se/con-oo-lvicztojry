@@ -676,3 +676,124 @@ View 层直接消费的是 `gameStore`（Store Adapter），不是 `Game` 或 `S
 - **最稳定**：`Sudoku` 和 `Game` 领域对象（纯 JS，无框架依赖）
 - **最可能改动**：`gameStore` adapter 层（需要适配 Svelte 5 的 runes 响应式机制）
 - **可能需要调整**：UI 组件中的 `$store` 语法（Svelte 5 使用 `$state` 和 `$derived`）
+
+---
+
+## 七、实现改进记录（HW1.1 接入修复）
+
+### 1. 修复的问题
+
+在初始接入时，存在以下关键问题，本次已全部修复：
+
+#### 问题 1：订阅泄漏（gameStore.js）
+
+**问题描述**：`initGame()` 和 `loadFromJSON()` 每次调用都会创建新的订阅，但没有取消旧订阅，导致：
+- 内存泄漏
+- 多次触发 `syncToStores()`
+- 旧 Game 对象无法被 GC 回收
+
+**修复方案**：
+```javascript
+// 保存取消订阅函数
+let unsubscribeGame = null;
+
+function unsubscribeCurrent() {
+  if (unsubscribeGame) {
+    unsubscribeGame();
+    unsubscribeGame = null;
+  }
+}
+
+// 在 initGame 和 loadFromJSON 中先取消旧订阅
+unsubscribeCurrent();
+unsubscribeGame = game.subscribe(() => {
+  syncToStores();
+});
+```
+
+#### 问题 2：双重初始化（game.js）
+
+**问题描述**：`startNew()` 和 `startCustom()` 同时调用：
+1. `grid.generate(diff)` - 设置旧 grid store
+2. 通过订阅机制再初始化 `gameStore.initGame()`
+
+这导致：
+- 不必要的异步等待
+- 两套 grid 体系并行存在
+- 数据源不清晰
+
+**修复方案**：
+```javascript
+// 直接生成/解码 grid，然后一次性初始化 gameStore
+const generatedGrid = generateSudoku(diff);
+gameStore.initGame(generatedGrid);
+```
+
+不再依赖旧 grid store 的订阅机制，改为直接传递数据。
+
+#### 问题 3：UI 组件引用旧数据源
+
+**问题描述**：多个 UI 组件仍然引用旧的 `grid` 和 `userGrid` stores：
+- `Board/index.svelte` - 引用 `$grid`
+- `Keyboard.svelte` - 导入未使用的 `userGrid`
+- `Actions.svelte` - hint 功能引用 `$userGrid`
+- `Share.svelte` - 使用旧 `grid.getSencode()` 方法
+
+**修复方案**：
+将所有对旧 stores 的引用统一改为 `$gameStore.grid`：
+```svelte
+<!-- 修改前 -->
+{#each $grid as row, y}
+  ...
+{/each}
+
+<!-- 修改后 -->
+{#each $gameStore.grid as row, y}
+  ...
+{/each}
+```
+
+### 2. 改进效果
+
+| 改进项 | 改进前 | 改进后 |
+|--------|--------|--------|
+| **数据源** | 双数据源（grid + gameStore.grid） | 单一数据源（gameStore.grid） |
+| **内存管理** | 订阅泄漏，持续增长 | 正确取消订阅，无泄漏 |
+| **初始化流程** | 异步订阅，双重初始化 | 同步初始化，清晰高效 |
+| **代码清晰度** | 散落在多处的 grid 引用 | 统一到 gameStore |
+| **可维护性** | 难以追踪数据流 | 清晰的分层架构 |
+
+### 3. 架构验证
+
+修改后的架构完全符合 DESIGN.md 中的设计：
+
+```
+┌─────────────────────────────────────┐
+│         Svelte Components           │  ← View 层
+│  (Board, Keyboard, Actions, etc.)   │     只消费 $gameStore.*
+└──────────────┬──────────────────────┘
+               │ 使用 $gameStore.grid, $gameStore.invalidCells
+               │ 调用 gameStore.guess(), undo(), redo()
+┌──────────────▼──────────────────────┐
+│        gameStore (Adapter)          │  ← 适配层
+│  - 持有 Game / Sudoku 领域对象      │     正确的订阅管理
+│  - 暴露 Svelte writable stores      │     同步初始化流程
+│  - 提供 UI 可调用的方法             │
+└──────────────┬──────────────────────┘
+               │ 内部调用
+┌──────────────▼──────────────────────┐
+│    Game / Sudoku (Domain Objects)   │  ← 领域层
+│  - 纯业务逻辑，无 UI 依赖           │
+│  - 提供 subscribe() 通知机制        │
+└─────────────────────────────────────┘
+```
+
+### 4. 测试要点
+
+- ✅ 开始新游戏 - grid 正确显示
+- ✅ 用户输入 - 通过 gameStore.guess() 正确更新
+- ✅ 撤销/重做 - UI 正确响应变化
+- ✅ 冲突检测 - invalidCells 正确高亮
+- ✅ 游戏完成 - isComplete 触发 gameWon
+- ✅ 分享功能 - 从 gameStore.grid 正确编码
+- ✅ 内存泄漏 - 多次切换游戏无累积订阅
