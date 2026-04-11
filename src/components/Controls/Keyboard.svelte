@@ -3,6 +3,7 @@
 	import { cursor } from '@sudoku/stores/cursor';
 	import { notes } from '@sudoku/stores/notes';
 	import { candidates } from '@sudoku/stores/candidates';
+	import { gameStore } from '@sudoku/gameStore';
 
 	// TODO: Improve keyboardDisabled
 	import { keyboardDisabled } from '@sudoku/stores/keyboard';
@@ -15,13 +16,15 @@
 				} else {
 					candidates.add($cursor, num);
 				}
-				userGrid.set($cursor, 0);
+				// 笔记模式下，也需要通过 gameStore 清除单元格
+				gameStore.guess($cursor.y, $cursor.x, 0);
 			} else {
 				if ($candidates.hasOwnProperty($cursor.x + ',' + $cursor.y)) {
 					candidates.clear($cursor);
 				}
 
-				userGrid.set($cursor, num);
+				// 通过领域对象进行输入
+				gameStore.guess($cursor.y, $cursor.x, num);
 			}
 		}
 	}
