@@ -56,8 +56,8 @@ export function createSudoku(input, givens = null) {
         throw new Error(`Invalid value: ${value}. Must be 0-9.`);
       }
 
-      // 不允许修改题目初始给定的格子
-      if (this.isGiven(row, col) && value !== 0) {
+      // 不允许修改题目初始给定的格子（包括清空）
+      if (this.isGiven(row, col)) {
         throw new Error(`Cannot modify given cell (${row}, ${col})`);
       }
 
